@@ -229,6 +229,7 @@ function ToolpathPreview({ program, operationColors = {}, idle = false }) {
   const [libraryPreview, setLibraryPreview] = useState('')
   const [previewMode, setPreviewMode] = useState('graphic')
   const [dragId, setDragId] = useState(null)
+  const [fileDropActive, setFileDropActive] = useState(false)
   const fileRef = useRef()
   const toolRef = useRef()
   const profile = profiles.find((item) => String(item.id) === String(profileId)) || profiles[0]
@@ -249,21 +250,27 @@ function ToolpathPreview({ program, operationColors = {}, idle = false }) {
   const previewProgram = libraryPreview || result
 
   async function addFiles(fileList) {
-    const imported = await Promise.all([...fileList].map(async (file) => parseProgram(file, await file.text())))
-    setSections((old) => {
-      const used = new Set(old.flatMap((section) => section.operations.map((operation) => operation.color)).filter(Boolean))
-      let cursor = old.flatMap((section) => section.operations).length % OPERATION_COLORS.length
-      const nextColor = () => {
-        for (let attempt = 0; attempt < OPERATION_COLORS.length; attempt++) {
-          const color = OPERATION_COLORS[(cursor + attempt) % OPERATION_COLORS.length]
-          if (!used.has(color)) { used.add(color); cursor = (cursor + attempt + 1) % OPERATION_COLORS.length; return color }
+    const files = [...(fileList || [])].filter((file) => /\.(din|nc|tap|txt)$/i.test(file.name))
+    if (!files.length) return
+    try {
+      const imported = await Promise.all(files.map(async (file) => parseProgram(file, await file.text())))
+      setSections((old) => {
+        const used = new Set(old.flatMap((section) => section.operations.map((operation) => operation.color)).filter(Boolean))
+        let cursor = old.flatMap((section) => section.operations).length % OPERATION_COLORS.length
+        const nextColor = () => {
+          for (let attempt = 0; attempt < OPERATION_COLORS.length; attempt++) {
+            const color = OPERATION_COLORS[(cursor + attempt) % OPERATION_COLORS.length]
+            if (!used.has(color)) { used.add(color); cursor = (cursor + attempt + 1) % OPERATION_COLORS.length; return color }
+          }
+          return OPERATION_COLORS[cursor++ % OPERATION_COLORS.length]
         }
-        const color = OPERATION_COLORS[cursor++ % OPERATION_COLORS.length]
-        return color
-      }
-      return [...old, ...imported.map((section) => ({ ...section, operations: section.operations.map((operation) => ({ ...operation, color: nextColor() })) }))]
-    })
+        return [...old, ...imported.map((section) => ({ ...section, operations: section.operations.map((operation) => ({ ...operation, color: nextColor() })) }))]
+      })
+    } catch (error) { alert('NC-Datei konnte nicht gelesen werden. Bitte DIN, NC, TAP oder TXT verwenden.') }
   }
+  function isFileDrag(event) { return Array.from(event.dataTransfer?.types || []).includes('Files') }
+  function handleFileDrop(event) { if (!isFileDrag(event)) return; event.preventDefault(); setFileDropActive(false); addFiles(event.dataTransfer.files) }
+
   function updateSection(id, updates) { setSections((old) => old.map((section) => section.id === id ? { ...section, ...updates } : section)) }
   function updateOperation(sectionId, operationId, updates) {
     setSections((old) => old.map((section) => section.id !== sectionId ? section : { ...section, operations: section.operations.map((op) => op.id === operationId ? { ...op, ...updates } : op) }))
@@ -300,15 +307,16 @@ function ToolpathPreview({ program, operationColors = {}, idle = false }) {
   function download() { const url = URL.createObjectURL(new Blob([result], { type: 'text/plain;charset=utf-8' })); const a = document.createElement('a'); a.href = url; a.download = 'combined.' + selectedDownloadFormat; a.click(); URL.revokeObjectURL(url) }
   function flashWhiteMode() { setWhiteMessage(false); setWhiteFlash(true); window.setTimeout(() => { setWhiteFlash(false); setWhiteMessage(true); window.setTimeout(() => setWhiteMessage(false), 4200) }, 1000) }
 
-  return <main>
+  return <main onDragOver={(event) => { if (isFileDrag(event)) { event.preventDefault(); setFileDropActive(true) } }} onDragLeave={(event) => { if (isFileDrag(event)) setFileDropActive(false) }} onDrop={handleFileDrop}>
     <header className="topbar"><div className="brand"><img src={logo} alt="JH Artworks" /><h1>NC Combiner</h1></div><div className="header-actions"><span className="count">{sections.length} Abschnitte</span><button className="secondary white-mode-button" onClick={flashWhiteMode}>Whitemode</button><label className="download-format">Format<select value={selectedDownloadFormat} onChange={(event) => setDownloadFormat(event.target.value)}>{['din', 'nc', 'ngc', 'tap', 'txt'].map((format) => <option key={format} value={format}>.{format}</option>)}</select></label><button className="primary" onClick={download} disabled={!sections.length}>Datei herunterladen</button></div></header>
     {whiteFlash && <div className="white-flash" aria-hidden="true" />}
+    {fileDropActive && <div className="file-drop-overlay" aria-hidden="true"><div>Dateien hier ablegen</div><span>DIN, NC, TAP oder TXT</span></div>}
     {whiteMessage && <div className="white-mode-message" role="status">Ich hoffe dass war dir hell genug. Only Pussys are using Whitemode</div>}
     <div className="layout">
       <aside className="sidebar">
         <section><h2>Verwaltung</h2><button className="secondary" onClick={() => setAdminOpen(true)}>Postprozessoren &amp; Aliase</button></section>
         <section><h2>Persönliche Bibliothek</h2><button className="secondary" onClick={() => setLibraryOpen(true)}>{account ? account.username + " · Bibliothek" : "Anmelden / Bibliothek"}</button>{(adminSession || account?.isAdmin) && <button className="secondary" onClick={() => setUserAdminOpen(true)}>Benutzerverwaltung</button>}</section>
-        <section><div className="section-heading"><h2>NC-Programme</h2></div><button className="upload" onClick={() => fileRef.current.click()}>＋ Dateien hinzufügen</button><input ref={fileRef} type="file" accept=".din,.nc,.tap,.txt" multiple hidden onChange={(event) => addFiles(event.target.files)} /></section>
+        <section><div className="section-heading"><h2>NC-Programme</h2></div><label className="upload" htmlFor="nc-program-files">Dateien hinzuf&uuml;gen</label><input id="nc-program-files" ref={fileRef} className="file-input" type="file" accept=".din,.nc,.tap,.txt" multiple onChange={async (event) => { await addFiles(event.target.files); event.target.value = '' }} /></section>
         <section><h2>Werkzeugtabelle</h2><button className="secondary" onClick={() => toolRef.current.click()}>Tabelle hochladen</button><input ref={toolRef} type="file" accept=".csv,.tsv,.txt,.json" hidden onChange={async (event) => { try { const items = parseToolTable(await event.target.files[0].text(), event.target.files[0].name); setTools(items); } catch { alert('Werkzeugtabelle konnte nicht gelesen werden. Erwartet werden CSV, Text oder JSON.'); } }} />
           <p className="hint">{tools.length ? `${tools.length} Werkzeuge geladen` : 'CSV, TSV, Text oder JSON'}</p></section>
         <section><h2>Postprozessor</h2><select value={profileId} onChange={(event) => { setProfileId(event.target.value); setDownloadFormat('') }}>{profiles.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></section>
@@ -316,7 +324,7 @@ function ToolpathPreview({ program, operationColors = {}, idle = false }) {
       <section className="workspace">
         <div className="workspace-body"><div className="editor-pane">
         <div className="workspace-head"><div><span className="eyebrow">MERGE-REIHENFOLGE</span><h2>Bearbeitungsabschnitte</h2></div></div>
-        {!sections.length && <div className="empty"><div className="empty-icon">⌁</div><h2>Programme hinzufügen</h2><p>Lade deine DIN-Dateien hoch. Kopf und Programmende werden beim Merge automatisch nur einmal ausgegeben.</p><button className="primary" onClick={() => fileRef.current.click()}>NC-Dateien wählen</button></div>}
+        {!sections.length && <div className="empty"><div className="empty-icon">⌁</div><h2>Programme hinzufügen</h2><p>Lade deine DIN-Dateien hoch. Kopf und Programmende werden beim Merge automatisch nur einmal ausgegeben.</p><label className="primary empty-upload" htmlFor="nc-program-files">NC-Dateien w&auml;hlen</label></div>}
         <div className="cards">{sections.length > 0 && <div className="program-boundary program-start"><span>G-Code Anfang</span><small>Programmkopf</small></div>}{sections.map((section, index) => <React.Fragment key={section.id}><article className={`card ${section.enabled ? '' : 'disabled'}`} style={{ '--section-color': section.operations[0]?.color || '#527aa9' }} key={section.id} draggable onDragStart={() => setDragId(section.id)} onDragOver={(event) => event.preventDefault()} onDrop={() => { const from = sections.findIndex((item) => item.id === dragId); if (from !== index) move(from, index); setDragId(null) }}>
           <div className="card-head"><span className="drag" title="Zum Sortieren ziehen">&#8281;</span><span className="order">{String(index + 1).padStart(2, '0')}</span><input className="filename" value={section.filename} onChange={(event) => updateSection(section.id, { filename: event.target.value })} /><div className="header-operations">{section.operations.map((operation) => <div className="header-operation" key={operation.id}><span className="operation-name"><i style={{ backgroundColor: operation.color || '#80d99b' }} />({operation.name})</span><label className="tool-control"><span>Werkzeug T</span><div className="tool-inputs"><input type="number" min="0" step="1" inputMode="numeric" list="tool-options" placeholder="Nummer" value={operation.tool} onChange={(event) => updateOperation(section.id, operation.id, { tool: event.target.value })} />{tools.length > 0 && <select aria-label="Werkzeug aus Tabelle w&auml;hlen" value={tools.some((tool) => tool.number === operation.tool) ? operation.tool : ''} onChange={(event) => updateOperation(section.id, operation.id, { tool: event.target.value })}><option value="" disabled>Aus Tabelle w&auml;hlen</option>{tools.map((tool) => <option key={tool.number} value={tool.number}>T{tool.number}{tool.name ? ' \u2014 ' + tool.name : ''}</option>)}</select>}</div></label><label className="color-control" title="Operationsfarbe"><span>Farbe</span><input type="color" value={operation.color || '#80d99b'} onChange={(event) => updateOperation(section.id, operation.id, { color: event.target.value })} /></label></div>)}</div><label className="toggle"><input type="checkbox" checked={section.enabled} onChange={(event) => updateSection(section.id, { enabled: event.target.checked })} /><span /></label><button className="delete" onClick={() => setSections((old) => old.filter((item) => item.id !== section.id))} title="Abschnitt entfernen">&times;</button></div>
           <div className="settings"><div className="rate-group"><span>Vorschübe F</span>{section.feedValues.length ? section.feedValues.map((item) => <label key={item.original}>F{item.original}<input inputMode="decimal" value={item.value} onChange={(event) => updateSection(section.id, { feedValues: section.feedValues.map((entry) => entry.original === item.original ? { ...entry, value: event.target.value } : entry) })} /></label>) : <p className="hint">keine F-Werte</p>}</div><div className="rate-group"><span>Drehzahlen S</span>{section.speedValues.length ? section.speedValues.map((item) => <label key={item.original}>S{item.original}<input inputMode="decimal" value={item.value} onChange={(event) => updateSection(section.id, { speedValues: section.speedValues.map((entry) => entry.original === item.original ? { ...entry, value: event.target.value } : entry) })} /></label>) : <p className="hint">keine S-Werte</p>}</div><label>Nullpunkt<select value={section.offset} onChange={(event) => updateSection(section.id, { offset: event.target.value })}>{['G54','G55','G56','G57','G58','G59'].map((item) => <option key={item}>{item}</option>)}</select></label></div>
