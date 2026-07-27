@@ -1,50 +1,121 @@
 # NC Combiner
 
-Browser-basierte Oberfläche zum Zusammenführen von Beamicon-/DIN-NC-Dateien. Die Verarbeitung erfolgt vollständig im Browser; hochgeladene NC-Programme und Werkzeugtabellen verlassen den Rechner nicht.
+Browserbasierte Oberfläche zum Zusammenführen von DIN-/ISO-NC-Dateien. Die geladenen NC-Dateien und Werkzeugtabellen werden direkt im Browser verarbeitet und nicht an den Server hochgeladen.
 
-## Start mit Docker
+## Schnellstart mit Docker Compose
+
+### 1. Voraussetzungen
+
+Auf dem Rechner oder Server muss Docker inklusive Docker Compose installiert sein. Test:
 
 ```bash
-docker compose up --build
+docker --version
+docker compose version
 ```
 
-Danach ist die Anwendung unter <http://localhost:8023> erreichbar.
+### 2. Projektordner vorbereiten
+
+Den kompletten Projektordner auf den Rechner bzw. Server kopieren und im Terminal in diesen Ordner wechseln:
+
+```bash
+cd /pfad/zu/NcCombiner
+```
+
+Optional, aber für einen Server dringend empfohlen: die Beispiel-Konfiguration kopieren und Passwörter ändern.
+
+Linux/macOS:
+
+```bash
+cp .env.example .env
+```
+
+Windows PowerShell:
+
+```powershell
+Copy-Item .env.example .env
+```
+
+Danach die Datei `.env` öffnen und mindestens `ADMIN_PASSWORD`, `POSTGRES_PASSWORD` und `JWT_SECRET` ersetzen.
+
+### 3. Starten
+
+```bash
+docker compose up -d --build
+```
+
+Beim ersten Start werden das Frontend gebaut, PostgreSQL gestartet und die Datenbank angelegt. Danach im Browser öffnen:
+
+- Lokal: <http://localhost:8023>
+- Im Netzwerk/auf einem Server: `http://SERVER-IP:8023`
+
+Für einen öffentlich erreichbaren Server ist ein Reverse Proxy mit HTTPS empfehlenswert.
+
+### 4. Prüfen, ob alles läuft
+
+```bash
+docker compose ps
+docker compose logs -f nc-combiner
+```
+
+`Ctrl+C` beendet nur die Log-Anzeige, nicht den laufenden Stack.
+
+## Aktualisieren
+
+Nach Änderungen im Projektordner oder nach einem Update:
+
+```bash
+docker compose up -d --build
+```
+
+Danach im Browser einmal `Strg+F5` drücken, damit keine alte JavaScript-Datei aus dem Browser-Cache verwendet wird.
+
+## Stoppen und Daten
+
+Stack stoppen, Datenbank behalten:
+
+```bash
+docker compose down
+```
+
+Komplett löschen, inklusive Datenbank, Benutzerkonten, Postprozessoren und Bibliotheken:
+
+```bash
+docker compose down -v
+```
+
+Achtung: Der letzte Befehl löscht die gespeicherten Daten dauerhaft.
 
 ## Bedienung
 
-1. NC-Dateien (`.din`, `.nc`, `.tap`, `.txt`) hochladen und per Drag & Drop sortieren.
-2. Optional eine Werkzeugtabelle als CSV, JSON oder Textdatei laden. CSV-Spalten wie `tool`, `toolNumber`, `nummer` sowie `name`, `bezeichnung` werden erkannt.
-3. Für jeden Abschnitt Vorschub, Drehzahl, Werkstücknullpunkt und Werkzeugwechsel bearbeiten.
-4. Ein Postprozessorprofil auswählen oder Kopf und Ende anpassen.
-5. Vorschau prüfen und die kombinierte `.din`-Datei herunterladen.
+1. NC-Dateien (`.din`, `.nc`, `.tap`, `.txt`) per Klick auswählen oder per Drag & Drop auf die Seite ziehen.
+2. Die Dateikacheln per Drag & Drop in die gewünschte Reihenfolge bringen.
+3. Vorschübe, Drehzahlen, Nullpunkt, Werkzeug und Operationsfarbe anpassen.
+4. Zwischenblöcke am Ende einer Datei hinzufügen, zum Beispiel Leerzeilen, Wartezeit, Pause oder eine weitere NC-Datei.
+5. Rechts zwischen Grafik- und Textvorschau wechseln, Ergebnis prüfen und herunterladen.
 
-Das Standardprofil entspricht dem Kopf/Ende der bereitgestellten Beamicon-Programme. Beim Kombinieren wird der Kopf nur einmal vorangestellt und `M9 / G53 / G0 Z0 / G28 / M30 / %` nur einmal ans Ende geschrieben.
+## Anmeldung und Administration
 
-## Administration und Datenbank
+Der Merge funktioniert ohne Anmeldung. Für die Verwaltung von Postprozessoren, Aliasen und Benutzern ist ein Admin-Login erforderlich.
 
-Die Anwendung ist unter <http://localhost:8023> erreichbar. Der Merge selbst benötigt keine Anmeldung.
-
-Postprozessoren und NC-Aliase werden dauerhaft in PostgreSQL gespeichert und sind über **Verwaltung** in der Oberfläche administrierbar.
+Standard-Zugang beim ersten Start, falls nicht in `.env` geändert:
 
 - Benutzer: `admin`
 - Passwort: `change-me-123!`
 
-## Benutzerbibliothek
+Dieses Passwort auf einem Server unbedingt vor der produktiven Nutzung ändern.
 
-Der Combiner kann weiterhin ohne Anmeldung verwendet werden. über **Persönliche Bibliothek** können angemeldete Nutzer kombinierte G-Code-Dateien und Werkzeuglisten privat speichern und wieder laden.
+## Postprozessoren
 
-Admins können in der **Benutzerverwaltung** Konten anlegen oder löschen, Passwörter zurücksetzen und Benutzer zu Admins machen bzw. die Admin-Rolle entziehen.
+- Beamicon / Benezan: Verweilzeit standardmäßig `G4 H{seconds}`
+- Estlcam, LinuxCNC und EdingCNC: eigene, im Adminbereich editierbare Vorlagen
 
-## Controllerprofile
+Postprozessoren, NC-Aliase, Benutzer, gespeicherte Programme und Werkzeuglisten werden dauerhaft in PostgreSQL gespeichert.
 
-Neben Beamicon, Estlcam und LinuxCNC wird EdingCNC als Datenbank-Standardprofil angelegt. Das Profil basiert auf der [EdingCNC G-Code-Referenz](https://docs.edingcnc.com/supported-g-code) und verwendet einen kompatiblen Programmrahmen mit `G17 G21 G40 G49 G54 G80 G90 G94`, `G64` sowie `M30`.
+## Wenn Dateiupload nicht funktioniert
 
-## Frontend-Build
+Der Dateiimport geschieht im Browser. Die Datei wird nicht an Docker oder PostgreSQL hochgeladen. Daher helfen meist diese Schritte:
 
-Docker liefert das bereits erzeugte `dist`-Frontend aus und installiert im Container nur die Backend-Abhängigkeiten. Dadurch bleibt `docker compose up --build` schnell und reproduzierbar. Nach Änderungen in `src/` vor dem Docker-Build einmal lokal ausführen:
-
-```bash
-npm ci
-npm run build
-docker compose up --build
-```
+1. Seite mit `Strg+F5` komplett neu laden.
+2. Sicherstellen, dass auf dem Server wirklich der aktuelle Stack mit `docker compose up -d --build` läuft.
+3. Die Browser-Konsole auf eine konkrete Fehlermeldung prüfen.
+4. NC-Dateien nur mit den Endungen `.din`, `.nc`, `.tap` oder `.txt` auswählen.
