@@ -1,0 +1,31 @@
+services:
+  nc-combiner:
+    build: .
+    ports:
+      - "8023:8023"
+    environment:
+      PORT: 8023
+      DATABASE_URL: postgresql://nc_combiner:${POSTGRES_PASSWORD:-nc-combiner}@postgres:5432/nc_combiner
+      ADMIN_USERNAME: ${ADMIN_USERNAME:-admin}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-change-me-123!}
+      JWT_SECRET: ${JWT_SECRET:-replace-this-secret-before-production}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: nc_combiner
+      POSTGRES_USER: nc_combiner
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-nc-combiner}
+    volumes:
+      - nc-combiner-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U nc_combiner -d nc_combiner"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+volumes:
+  nc-combiner-data:
