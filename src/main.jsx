@@ -23,7 +23,7 @@ const DEFAULT_PROFILE = { id: 'beamicon', name: 'Beamicon / Benezan', header: DE
 const downloadExtensionFor = (profile) => { const name = String(profile?.name || '').toLowerCase(); if (name.includes('linuxcnc')) return 'ngc'; if (name.includes('estlcam') || name.includes('eding')) return 'nc'; return profile?.extension || 'din' }
 const STORAGE_KEY = 'nc-combiner-profiles-v1'
 
-const uid = () => crypto.randomUUID()
+const uid = () => globalThis.crypto?.randomUUID?.() || ('nc-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 11))
 const OPERATION_COLORS = ['#64d8ff', '#8fe388', '#ff9d6c', '#d49bff', '#ffd76b', '#ff82b2', '#78b8ff']
 const randomOperationColor = () => OPERATION_COLORS[Math.floor(Math.random() * OPERATION_COLORS.length)]
 const normalise = (text) => text.replace(/\r\n?/g, '\n').replace(/^\uFEFF/, '')
@@ -266,7 +266,7 @@ function ToolpathPreview({ program, operationColors = {}, idle = false }) {
         }
         return [...old, ...imported.map((section) => ({ ...section, operations: section.operations.map((operation) => ({ ...operation, color: nextColor() })) }))]
       })
-    } catch (error) { alert('NC-Datei konnte nicht gelesen werden. Bitte DIN, NC, TAP oder TXT verwenden.') }
+    } catch (error) { console.error('NC-Datei konnte nicht verarbeitet werden:', error); alert('NC-Datei konnte nicht verarbeitet werden: ' + (error?.message || 'Unbekannter Fehler')) }
   }
   function isFileDrag(event) { return Array.from(event.dataTransfer?.types || []).includes('Files') }
   function handleFileDrop(event) { if (!isFileDrag(event)) return; event.preventDefault(); setFileDropActive(false); addFiles(event.dataTransfer.files) }
