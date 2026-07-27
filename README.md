@@ -37,6 +37,43 @@ Copy-Item .env.example .env
 
 Danach die Datei `.env` öffnen und mindestens `ADMIN_PASSWORD`, `POSTGRES_PASSWORD` und `JWT_SECRET` ersetzen.
 
+### Windows mit Docker Desktop
+
+Das Projekt funktioniert auch direkt mit **Docker Desktop** unter Windows. Docker Desktop starten und warten, bis unten links bzw. in der Anwendung angezeigt wird, dass die Docker Engine läuft.
+
+Dann **PowerShell** öffnen und in den Projektordner wechseln:
+
+```powershell
+Set-Location C:\Projects\NcCombiner
+```
+
+Container bauen und im Hintergrund starten:
+
+```powershell
+docker compose up -d --build
+```
+
+Danach ist die Anwendung unter <http://localhost:8023> erreichbar. In Docker Desktop erscheinen die Container im Bereich **Containers** als Projekt `nccombiner`.
+
+Nützliche PowerShell-Befehle:
+
+```powershell
+# Status anzeigen
+docker compose ps
+
+# Laufende Logs anzeigen (mit Strg+C nur die Ansicht verlassen)
+docker compose logs -f nc-combiner
+
+# Nach einem Update neu bauen und starten
+docker compose up -d --build
+
+# Container stoppen, Daten behalten
+docker compose down
+
+# Achtung: Container UND gespeicherte Datenbankdaten löschen
+docker compose down -v
+```
+
 ### 3. Starten
 
 ```bash
